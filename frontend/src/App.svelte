@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { api, EventsOn, errText, authLabel, endpoint, type Host, type State, type CheckResult } from './lib/api'
+  import { api, EventsOn, errText, endpoint, type Host, type State, type CheckResult } from './lib/api'
   import HostDetail from './lib/HostDetail.svelte'
   import HostForm from './lib/HostForm.svelte'
   import KeyWizard from './lib/KeyWizard.svelte'
@@ -142,7 +142,6 @@
         {#each groups as g (g.name)}
           <div class="group">{g.name}<span>{g.hosts.length}</span></div>
           {#each g.hosts as h (keyOf(h))}
-            {@const a = authLabel(h)}
             <button
               class="item"
               class:sel={keyOf(h) === selKey}
@@ -152,7 +151,7 @@
             >
               <span class="dot {dotClass(h)}"></span>
               <span class="name">{h.patterns.join(' ')}</span>
-              {#if !h.wildcard && a.tone === 'warn'}<span class="badge warn">明文</span>{/if}
+              {#if !h.wildcard && h.plainPassword}<span class="badge warn">明文</span>{:else if !h.wildcard && h.encPassword}<span class="badge warn">弱加密</span>{/if}
               <span class="ep">{h.wildcard ? '' : endpoint(h)}</span>
             </button>
           {/each}

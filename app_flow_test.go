@@ -88,3 +88,48 @@ func TestAppFlow(t *testing.T) {
 		t.Fatal("Connect accepted an unsafe alias")
 	}
 }
+
+func TestPasswordFlow(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
+	cfg := filepath.Join(dir, "config")
+	os.WriteFile(cfg, []byte("Host a\n    HostName 1.1.1.1\n\nHost b\n    HostName 2.2.2.2\n    #!! encPassword 00ff\n"), 0o600)
+	a := &App{ctx: context.Background(), set: settings.Settings{ConfigPath: cfg, TSSH: "tssh", Terminal: "true tssh {host}"}}
+
+	if _, err := a.RevealPassword("a"); err == nil {
+		t.Fatal("reveal without a password should fail")
+	}
+	if _, err := a.SetPassword("a", "with space"); err != nil {
+		t.Fatal(err)
+	}
+	if pw, err := a.RevealPassword("a"); err != nil || pw != "with space" {
+		t.Fatalf("reveal: %q %v", pw, err)
+	}
+	if _, err := a.SetPassword("a", " lead"); err != nil {
+		t.Fatal(err)
+	}
+	if pw, _ := a.RevealPassword("a"); pw != " lead" {
+		t.Fatalf("quoted form: %q", pw)
+	}
+	if _, err := a.SetPassword("a", "x#y"); err == nil {
+		t.Fatal("password with # accepted")
+	}
+	if _, err := a.SetPassword("a", "line\nbreak"); err == nil {
+		t.Fatal("password with newline accepted")
+	}
+	// the encrypted password on b is not plaintext: no reveal, but it is flagged
+	if _, err := a.RevealPassword("b"); err == nil {
+		t.Fatal("encPassword revealed as plaintext")
+	}
+	st, _ := a.Load()
+	if !st.Hosts[1].EncPassword || st.Hosts[1].PlainPassword {
+		t.Fatalf("b flags: %+v", st.Hosts[1])
+	}
+	if _, err := a.SetPassword("a", ""); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(cfg)
+	if strings.Contains(string(b), "Password lead") || strings.Contains(string(b), `" lead"`) {
+		t.Fatalf("password not removed:\n%s", b)
+	}
+}

@@ -7,6 +7,8 @@ export function Check(arg1:Array<string>):Promise<void>;
 
 export function Connect(arg1:string):Promise<void>;
 
+export function CopyPassword(arg1:string):Promise<number>;
+
 export function DeleteHost(arg1:string):Promise<string>;
 
 export function GenerateKey(arg1:string):Promise<main.KeyInfo>;
@@ -23,11 +25,15 @@ export function RemovePassword(arg1:string):Promise<string>;
 
 export function RestoreBackup(arg1:string):Promise<string>;
 
+export function RevealPassword(arg1:string):Promise<string>;
+
 export function SaveHost(arg1:main.SaveRequest):Promise<string>;
 
 export function SaveRaw(arg1:string,arg2:string):Promise<string>;
 
 export function SaveSettings(arg1:settings.Settings):Promise<void>;
+
+export function SetPassword(arg1:string,arg2:string):Promise<string>;
 
 export function SwitchToKey(arg1:string,arg2:string):Promise<string>;
 

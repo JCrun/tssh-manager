@@ -10,6 +10,10 @@ export function Connect(arg1) {
   return window['go']['main']['App']['Connect'](arg1);
 }
 
+export function CopyPassword(arg1) {
+  return window['go']['main']['App']['CopyPassword'](arg1);
+}
+
 export function DeleteHost(arg1) {
   return window['go']['main']['App']['DeleteHost'](arg1);
 }
@@ -42,6 +46,10 @@ export function RestoreBackup(arg1) {
   return window['go']['main']['App']['RestoreBackup'](arg1);
 }
 
+export function RevealPassword(arg1) {
+  return window['go']['main']['App']['RevealPassword'](arg1);
+}
+
 export function SaveHost(arg1) {
   return window['go']['main']['App']['SaveHost'](arg1);
 }
@@ -52,6 +60,10 @@ export function SaveRaw(arg1, arg2) {
 
 export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
+}
+
+export function SetPassword(arg1, arg2) {
+  return window['go']['main']['App']['SetPassword'](arg1, arg2);
 }
 
 export function SwitchToKey(arg1, arg2) {

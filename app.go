@@ -459,9 +459,30 @@ func (a *App) VerifyKey(alias, keyPath string) error {
 		"-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new",
 		"-i", keyPath, "-p", r.Port, "-l", r.User, r.HostName, "true")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("密钥登录失败：%s", strings.TrimSpace(string(out)))
+		return explainKeyFailure(strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+var deniedRe = regexp.MustCompile(`Permission denied \(([^)]*)\)`)
+
+// explainKeyFailure turns "Permission denied (password)" into a hint that the
+// server does not offer public-key authentication at all.
+func explainKeyFailure(out string) error {
+	if m := deniedRe.FindStringSubmatch(out); m != nil {
+		methods := strings.Split(m[1], ",")
+		hasKey := false
+		for _, x := range methods {
+			if strings.TrimSpace(x) == "publickey" {
+				hasKey = true
+			}
+		}
+		if !hasKey {
+			return fmt.Errorf("服务器没有开放密钥登录（只允许：%s）。公钥已装好，但服务器的 sshd 配置里大概率是 PubkeyAuthentication no，需要在服务器上改为 yes 并重载 sshd。\n原始信息：%s", m[1], out)
+		}
+		return fmt.Errorf("服务器拒绝了这把密钥（公钥可能没装到正确的用户，或 authorized_keys 权限不对）。\n原始信息：%s", out)
+	}
+	return fmt.Errorf("密钥登录失败：%s", out)
 }
 
 // SwitchToKey verifies the key, then sets IdentityFile/IdentitiesOnly and

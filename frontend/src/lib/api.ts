@@ -42,7 +42,7 @@ export const problemText: Record<string, string> = {
 
 export function authLabel(h: Host): { text: string; tone: 'ok' | 'warn' | 'muted' } {
   if (h.plainPassword) return { text: h.auth === 'key+password' ? '密钥 + 明文密码' : '明文密码', tone: 'warn' }
-  if (h.encPassword) return { text: h.auth === 'key+password' ? '密钥 + 加密密码' : '加密密码', tone: 'muted' }
+  if (h.encPassword) return { text: h.auth === 'key+password' ? '密钥 + 弱加密密码' : '弱加密密码', tone: 'warn' }
   if (h.auth === 'key') return { text: '密钥', tone: 'ok' }
   return { text: '默认', tone: 'muted' }
 }

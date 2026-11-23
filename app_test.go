@@ -41,3 +41,34 @@ func TestRedactLineLeavesOthers(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestSetPasswordForms(t *testing.T) {
+	cases := map[string]bool{"simple": true, "with space": true, `q"uote`: true, "tab\there": true, " lead": true,
+		`back\slash`: true, "日本語パス": true, "a#b": false, "a #b": false}
+	for pw, want := range cases {
+		d, _ := sshconf.Parse("Host a\n    HostName h\n")
+		ok := false
+		for _, f := range passwordForms(pw) {
+			d.Apply("a", []sshconf.Change{{Key: "Password", Value: f, Ext: true}})
+			if got, _ := d.Lookup("a", "Password"); got == pw {
+				ok = true
+				break
+			}
+		}
+		if ok != want {
+			t.Errorf("%q: storable=%v, want %v", pw, ok, want)
+		}
+	}
+}
+
+func TestExplainKeyFailure(t *testing.T) {
+	if e := explainKeyFailure("root@1.2.3.4: Permission denied (password)."); !strings.Contains(e.Error(), "PubkeyAuthentication no") {
+		t.Errorf("password-only not explained: %v", e)
+	}
+	if e := explainKeyFailure("root@1.2.3.4: Permission denied (publickey,password)."); !strings.Contains(e.Error(), "拒绝了这把密钥") {
+		t.Errorf("rejected key not explained: %v", e)
+	}
+	if e := explainKeyFailure("ssh: connect to host x port 22: Connection refused"); !strings.HasPrefix(e.Error(), "密钥登录失败") {
+		t.Errorf("other error changed: %v", e)
+	}
+}

@@ -10,7 +10,9 @@ It only manages the config; connecting still happens in your terminal with `tssh
 - Before each save: parse with `trzsz/ssh_config` (the parser tssh uses), check with `ssh -G`, back up the old file to `~/.config/tssh-manager/backups/` (last 30 kept), then write atomically with mode 0600. Saving is refused if the file changed on disk since it was read.
 - Checks: TCP connect, then `tssh -T <alias> true` with no stdin, so a prompt fails instead of hanging. Runs 8 at a time.
 - Key wizard: generate an ed25519 key, install it on the server (in the background with the stored tssh password, or with `ssh-copy-id` in a terminal), verify a key-only login, then set `IdentityFile`/`IdentitiesOnly` and remove the stored password.
-- Passwords (`#!! Password`, `encPassword`, TOTP secrets…) are never sent to the UI. They appear as `******`, and leaving the mask unchanged in the raw editor keeps the stored value.
+- Plaintext `#!! Password`: reveal (auto-hides after 20s), copy (clipboard cleared after 30s), set, change or delete per host. Every saved password is read back with tssh's own parser and must match exactly. `#` is not allowed, because tssh treats it as a comment.
+- `#!! encPassword` is flagged as weak: tssh encrypts it with a fixed key that is public in its source, so it is no safer than plaintext.
+- Passwords (`#!! Password`, `encPassword`, TOTP secrets…) are never sent to the UI unless you click reveal. They appear as `******`, and leaving the mask unchanged in the raw editor keeps the stored value.
 
 ## Build
 

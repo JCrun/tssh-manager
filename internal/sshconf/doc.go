@@ -444,3 +444,28 @@ func (d *Doc) Validate() error {
 	_, err := sshcfg.DecodeBytes([]byte(d.String()))
 	return err
 }
+
+// Lookup resolves key for alias the way tssh does (first match, quotes removed).
+func (d *Doc) Lookup(alias, key string) (string, error) {
+	cfg, err := sshcfg.DecodeBytes([]byte(d.String()))
+	if err != nil {
+		return "", err
+	}
+	return cfg.Get(alias, key)
+}
+
+// LocalValue returns the raw value of an option written in alias's own block.
+func (d *Doc) LocalValue(alias, key string, isExt bool) (string, bool) {
+	bi, err := d.find(alias)
+	if err != nil {
+		return "", false
+	}
+	b := d.blocks[bi]
+	for i := b.start + 1; i < b.bodyEnd; i++ {
+		kind, k, v := classify(d.lines[i])
+		if ((isExt && kind == ext) || (!isExt && kind == kv)) && strings.EqualFold(k, key) {
+			return v, true
+		}
+	}
+	return "", false
+}

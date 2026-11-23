@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api, errText, authLabel, endpoint, problemText, type Host, type CheckResult } from './api'
+  import PasswordPanel from './PasswordPanel.svelte'
 
   let { host, check, checking, oncheck, onedit, onkey, onchanged, notify }: {
     host: Host
@@ -92,6 +93,10 @@
       {#if host.proxyJump || eff.ProxyJump}<div><span>跳板</span><code>{host.proxyJump || eff.ProxyJump}</code></div>{/if}
       {#if host.identitiesOnly}<div><span>IdentitiesOnly</span><code>yes</code></div>{/if}
     </section>
+
+    {#if host.patterns.length === 1}
+      <PasswordPanel {host} onchanged={(m) => onchanged(m)} {notify} />
+    {/if}
   {/if}
 
   <section>
