@@ -484,6 +484,9 @@ func (a *App) SwitchToKey(alias, keyPath string) (string, error) {
 
 func (a *App) GetSettings() settings.Settings { return a.set }
 
+// Version returns the build version ("dev" for local builds).
+func (a *App) Version() string { return version }
+
 func (a *App) SaveSettings(s settings.Settings) error {
 	if err := settings.Save(s); err != nil {
 		return err

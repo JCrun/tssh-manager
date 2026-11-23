@@ -32,3 +32,5 @@ export function SaveSettings(arg1:settings.Settings):Promise<void>;
 export function SwitchToKey(arg1:string,arg2:string):Promise<string>;
 
 export function VerifyKey(arg1:string,arg2:string):Promise<void>;
+
+export function Version():Promise<string>;

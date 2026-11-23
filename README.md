@@ -25,6 +25,10 @@ go test -tags webkit2_41 ./...        # TSSHM_REAL=1 also round-trips your real 
 
 ## Install
 
+Prebuilt x86_64 builds are on the [Releases](https://github.com/JCrun/tssh-manager/releases) page: unpack and run `./install.sh`. They need GTK 3 and WebKitGTK 4.1 (`webkit2gtk-4.1` on Arch, `libwebkit2gtk-4.1-0` on Debian/Ubuntu).
+
+From source:
+
 ```sh
 scripts/install.sh              # build, then install to ~/.local/bin with an app-menu entry and icon
 scripts/install.sh --no-build   # install the existing build/bin/tssh-manager
@@ -34,6 +38,10 @@ scripts/install.sh --uninstall  # remove binary, menu entry and icon (keeps sett
 ## Settings
 
 `~/.config/tssh-manager/settings.json`: terminal command (for example `ghostty -e tssh {host}`; `{host}` becomes a separate argument and no shell is involved), tssh binary, config path and key directory.
+
+## Releases
+
+Pushing a `v*` tag runs `.github/workflows/build.yml`: type check, build, vet and tests, then a GitHub Release with `tssh-manager-<tag>-linux-amd64.tar.gz` and its sha256. Pushes to main and PRs run the same checks without releasing.
 
 ## Layout
 

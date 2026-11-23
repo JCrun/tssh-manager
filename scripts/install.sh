@@ -4,8 +4,15 @@
 #   ~/.local/share/applications/tssh-manager.desktop
 #   ~/.local/share/icons/hicolor/scalable/apps/tssh-manager.svg
 # Usage: scripts/install.sh [--no-build] | --uninstall
+# Also works from an unpacked release tarball (./install.sh next to the binary).
 set -eu
-cd "$(dirname "$0")/.."
+HERE="$(cd "$(dirname "$0")" && pwd)"
+if [ -x "$HERE/tssh-manager" ] && [ -f "$HERE/tssh-manager.svg" ]; then
+  # release tarball layout: prebuilt binary, nothing to build
+  cd "$HERE"; SRC_BIN=./tssh-manager; SRC_SVG=./tssh-manager.svg; PREBUILT=1
+else
+  cd "$HERE/.."; SRC_BIN=build/bin/tssh-manager; SRC_SVG=build/tssh-manager.svg; PREBUILT=0
+fi
 
 BIN="$HOME/.local/bin"
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
@@ -24,17 +31,18 @@ if [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
-if [ "${1:-}" != "--no-build" ]; then
+if [ "$PREBUILT" = 0 ] && [ "${1:-}" != "--no-build" ]; then
   WAILS="$(command -v wails || echo "$HOME/go/bin/wails")"
-  "$WAILS" build -tags webkit2_41 -clean >/dev/null
+  VER="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
+  "$WAILS" build -tags webkit2_41 -clean -trimpath -ldflags "-s -w -X main.version=$VER" >/dev/null
 fi
 
-install -Dm755 build/bin/tssh-manager "$BIN/tssh-manager"
-install -Dm644 build/tssh-manager.svg "$ICONS/scalable/apps/tssh-manager.svg"
+install -Dm755 "$SRC_BIN" "$BIN/tssh-manager"
+install -Dm644 "$SRC_SVG" "$ICONS/scalable/apps/tssh-manager.svg"
 if command -v rsvg-convert >/dev/null; then
   for s in 48 128 256; do
     mkdir -p "$ICONS/${s}x${s}/apps"
-    rsvg-convert -w "$s" -h "$s" build/tssh-manager.svg -o "$ICONS/${s}x${s}/apps/tssh-manager.png"
+    rsvg-convert -w "$s" -h "$s" "$SRC_SVG" -o "$ICONS/${s}x${s}/apps/tssh-manager.png"
   done
 fi
 

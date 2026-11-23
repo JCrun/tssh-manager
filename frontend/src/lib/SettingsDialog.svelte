@@ -6,8 +6,9 @@
   let s = $state<Settings | null>(null)
   let error = $state('')
   let busy = $state(false)
+  let version = $state('')
 
-  onMount(async () => { s = await api.GetSettings() })
+  onMount(async () => { s = await api.GetSettings(); version = await api.Version() })
 
   const presets = [
     'ghostty -e tssh {host}',
@@ -39,6 +40,7 @@
   {/if}
   {#if error}<p class="err">{error}</p>{/if}
   <div class="actions">
+    <span class="ver">tssh-manager {version}</span>
     <button onclick={onclose}>取消</button>
     <button class="primary" onclick={save} disabled={!s || busy}>保存</button>
   </div>
@@ -51,5 +53,6 @@
   .presets { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
   .small { font-size: 12px; padding: 2px 8px; color: var(--muted); }
   .err { color: var(--bad); }
-  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 16px; }
+  .ver { margin-right: auto; color: var(--faint); font-size: 12px; }
 </style>
