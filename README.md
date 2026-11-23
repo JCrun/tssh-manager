@@ -23,6 +23,14 @@ wails dev -tags webkit2_41            # live reload
 go test -tags webkit2_41 ./...        # TSSHM_REAL=1 also round-trips your real ~/.ssh/config, read-only
 ```
 
+## Install
+
+```sh
+scripts/install.sh              # build, then install to ~/.local/bin with an app-menu entry and icon
+scripts/install.sh --no-build   # install the existing build/bin/tssh-manager
+scripts/install.sh --uninstall  # remove binary, menu entry and icon (keeps settings and backups)
+```
+
 ## Settings
 
 `~/.config/tssh-manager/settings.json`: terminal command (for example `ghostty -e tssh {host}`; `{host}` becomes a separate argument and no shell is involved), tssh binary, config path and key directory.
