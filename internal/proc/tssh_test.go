@@ -31,7 +31,8 @@ func TestFindTSSH(t *testing.T) {
 		t.Skip(err)
 	}
 	defer os.Remove(bundled)
-	if got := FindTSSH("tssh"); got.Source != "bundled" || got.Path != bundled {
+	want, _ := filepath.EvalSymlinks(bundled) // macOS: /var -> /private/var
+	if got := FindTSSH("tssh"); got.Source != "bundled" || got.Path != want {
 		t.Fatalf("bundled: %+v", got)
 	}
 }
