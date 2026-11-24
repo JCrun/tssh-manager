@@ -33,11 +33,11 @@ func TestViewRedactsSecrets(t *testing.T) {
 
 func TestRedactLineLeavesOthers(t *testing.T) {
 	for _, l := range []string{"    HostName 1.2.3.4", "# Password in a comment stays", "    #!! GroupLabels a"} {
-		if redactLine(l) != l {
-			t.Errorf("changed %q -> %q", l, redactLine(l))
+		if sshconf.RedactLine(l) != l {
+			t.Errorf("changed %q -> %q", l, sshconf.RedactLine(l))
 		}
 	}
-	if got := redactLine("\t#!!Password=secret"); got != "\t#!!Password ******" {
+	if got := sshconf.RedactLine("\t#!!Password=secret"); got != "\t#!!Password ******" {
 		t.Errorf("got %q", got)
 	}
 }

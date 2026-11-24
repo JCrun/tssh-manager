@@ -81,8 +81,13 @@ func TestAppFlow(t *testing.T) {
 	}
 	// terminal argv: {host} is a separate argument, never a shell string
 	argv, _ := a.terminalArgv("a; rm -rf ~", nil)
-	if strings.Join(argv, "|") != "true|tssh|a; rm -rf ~" {
+	if len(argv) != 3 || argv[0] != "true" || filepath.Base(argv[1]) != "tssh" || argv[2] != "a; rm -rf ~" {
 		t.Fatalf("argv %q", argv)
+	}
+	// Terminal.app: quoted for the shell, then for AppleScript
+	m := macTerminal([]string{settings.MacTerminalApp, "/opt/tssh", `it's "x"`})
+	if len(m) != 5 || m[0] != "osascript" || m[2] != `tell application "Terminal" to do script "'/opt/tssh' 'it'\\''s \"x\"'"` {
+		t.Fatalf("mac %q", m)
 	}
 	if err := a.Connect("a; rm"); err == nil {
 		t.Fatal("Connect accepted an unsafe alias")

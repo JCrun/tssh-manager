@@ -10,14 +10,9 @@
 
   onMount(async () => { s = await api.GetSettings(); version = await api.Version() })
 
-  const presets = [
-    'ghostty -e tssh {host}',
-    'konsole -e tssh {host}',
-    'kitty tssh {host}',
-    'alacritty -e tssh {host}',
-    'wezterm start -- tssh {host}',
-    'gnome-terminal -- tssh {host}',
-  ]
+  let presets = $state<string[]>([])
+  onMount(async () => { presets = (await api.TerminalPresets()) ?? [] })
+  const presetName = (p: string) => { const w = p.split(' '); return w[0] === 'open' ? w[2] : w[0] === '@terminal-app' ? 'Terminal.app' : w[0] }
 
   async function save() {
     busy = true; error = ''
@@ -30,7 +25,7 @@
   {#if s}
     <label for="s-term">终端命令（<code>{'{host}'}</code> 会替换成别名，不经过 shell）</label>
     <input id="s-term" class="mono" bind:value={s.terminal} />
-    <div class="presets">{#each presets as p}<button class="ghost small" onclick={() => (s!.terminal = p)}>{p.split(' ')[0]}</button>{/each}</div>
+    <div class="presets">{#each presets as p}<button class="ghost small" title={p} onclick={() => (s!.terminal = p)}>{presetName(p)}</button>{/each}</div>
     <label for="s-tssh">tssh 程序</label>
     <input id="s-tssh" class="mono" bind:value={s.tssh} />
     <label for="s-cfg">SSH 配置文件</label>

@@ -7,10 +7,11 @@ import (
 	"bytes"
 	"context"
 	"net"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"tssh-manager/internal/proc"
 )
 
 // Result of checking one host.
@@ -37,7 +38,7 @@ func Resolve(ctx context.Context, sshBin, configPath, alias string) (Resolved, e
 	if configPath != "" {
 		args = append(args, "-F", configPath)
 	}
-	out, err := exec.CommandContext(ctx, sshBin, append(args, alias)...).Output()
+	out, err := proc.Command(ctx, sshBin, append(args, alias)...).Output()
 	if err != nil {
 		return Resolved{}, err
 	}
@@ -106,7 +107,7 @@ func Check(ctx context.Context, o Options, alias string) Result {
 	args = append(args, "-o", "ConnectTimeout="+strconv.Itoa(int(o.TCPTimeout.Seconds())), alias, "true")
 	actx, cancel := context.WithTimeout(ctx, o.AuthTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(actx, o.TSSH, args...)
+	cmd := proc.Command(actx, o.TSSH, args...)
 	cmd.Stdin = nil // /dev/null: any prompt fails instead of hanging
 	t := time.Now()
 	out, err := cmd.CombinedOutput()

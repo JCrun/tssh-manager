@@ -264,7 +264,7 @@ func (d *Doc) Apply(alias string, changes []Change) error {
 		case found >= 0:
 			d.lines[found] = rewriteValue(d.lines[found], c)
 		case c.Value != "":
-			ind := blockIndent(d.lines[b.start+1:b.bodyEnd])
+			ind := blockIndent(d.lines[b.start+1 : b.bodyEnd])
 			line := ind + c.Key + " " + c.Value
 			if c.Ext {
 				line = ind + "#!! " + c.Key + " " + c.Value

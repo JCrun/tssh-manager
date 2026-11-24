@@ -1,6 +1,7 @@
 #!/bin/sh
 # Build and install tssh-manager for the current user:
 #   ~/.local/bin/tssh-manager
+#   ~/.local/bin/tssh-sync (command line sync, when built from source)
 #   ~/.local/share/applications/tssh-manager.desktop
 #   ~/.local/share/icons/hicolor/scalable/apps/tssh-manager.svg
 # Usage: scripts/install.sh [--no-build] | --uninstall
@@ -24,7 +25,7 @@ refresh() {
 }
 
 if [ "${1:-}" = "--uninstall" ]; then
-  rm -f "$BIN/tssh-manager" "$APPS/tssh-manager.desktop" "$ICONS/scalable/apps/tssh-manager.svg"
+  rm -f "$BIN/tssh-manager" "$BIN/tssh-sync" "$APPS/tssh-manager.desktop" "$ICONS/scalable/apps/tssh-manager.svg"
   for s in 48 128 256; do rm -f "$ICONS/${s}x${s}/apps/tssh-manager.png"; done
   refresh
   echo "uninstalled (settings and backups in ~/.config/tssh-manager are kept)"
@@ -35,9 +36,12 @@ if [ "$PREBUILT" = 0 ] && [ "${1:-}" != "--no-build" ]; then
   WAILS="$(command -v wails || echo "$HOME/go/bin/wails")"
   VER="$(git describe --tags --always --dirty 2>/dev/null || echo dev)"
   "$WAILS" build -tags webkit2_41 -clean -trimpath -ldflags "-s -w -X main.version=$VER" >/dev/null
+  go build -trimpath -ldflags "-s -w -X main.version=$VER" -o build/bin/tssh-sync ./cmd/tssh-sync
 fi
 
 install -Dm755 "$SRC_BIN" "$BIN/tssh-manager"
+SRC_SYNC="$(dirname "$SRC_BIN")/tssh-sync"
+[ -x "$SRC_SYNC" ] && install -Dm755 "$SRC_SYNC" "$BIN/tssh-sync"
 install -Dm644 "$SRC_SVG" "$ICONS/scalable/apps/tssh-manager.svg"
 if command -v rsvg-convert >/dev/null; then
   for s in 48 128 256; do

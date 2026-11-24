@@ -10,12 +10,12 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"tssh-manager/internal/checker"
+	"tssh-manager/internal/proc"
 	"tssh-manager/internal/settings"
 	"tssh-manager/internal/sshconf"
 )
@@ -23,21 +23,24 @@ import (
 // App is bound to the frontend. Every mutating call re-reads the config from
 // disk, applies one change and saves, so the file stays the source of truth.
 type App struct {
-	ctx context.Context
-	mu  sync.Mutex
-	set settings.Settings
+	ctx  context.Context
+	mu   sync.Mutex
+	set  settings.Settings
+	sync syncState
 }
 
 func NewApp() *App { return &App{set: settings.Load()} }
 
-func (a *App) startup(ctx context.Context) { a.ctx = ctx }
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+	time.AfterFunc(time.Second, a.autoSync)
+}
 
-const mask = "******"
+const mask = sshconf.Mask
 
 var (
-	sensitiveRe = regexp.MustCompile(`(?i)(password|passphrase|secret|otp)`)
-	includeRe   = regexp.MustCompile(`(?i)^\s*include\b`)
-	keyNameRe   = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
+	includeRe = regexp.MustCompile(`(?i)^\s*include\b`)
+	keyNameRe = regexp.MustCompile(`[^A-Za-z0-9_-]+`)
 )
 
 // HostView is one Host block with secrets removed.
@@ -83,30 +86,12 @@ func cutKV(s string) (string, string, bool) {
 	return s[:i], strings.TrimSpace(v), true
 }
 
-// redactLine masks the value of password/secret options in one config line.
-func redactLine(l string) string {
-	t := strings.TrimSpace(l)
-	isExt := strings.HasPrefix(t, "#!!")
-	if strings.HasPrefix(t, "#") && !isExt {
-		return l
-	}
-	body := t
-	if isExt {
-		body = strings.TrimSpace(t[3:])
-	}
-	k, v, ok := cutKV(body)
-	if !ok || v == "" || !sensitiveRe.MatchString(k) {
-		return l
-	}
-	return l[:strings.Index(l, k)+len(k)] + " " + mask
-}
-
 func view(e sshconf.Entry) HostView {
 	h := HostView{Alias: e.Alias, Patterns: e.Patterns, Wildcard: e.Wildcard, Section: e.Section,
 		Line: e.Line, Effective: e.Effective}
 	var lines []string
 	for _, l := range strings.Split(e.Raw, "\n") {
-		lines = append(lines, redactLine(l))
+		lines = append(lines, sshconf.RedactLine(l))
 	}
 	h.Raw = strings.Join(lines, "\n")
 	for _, o := range e.Options {
@@ -138,7 +123,7 @@ func view(e sshconf.Entry) HostView {
 				h.ProxyJump = o.Value
 			}
 		}
-		if sensitiveRe.MatchString(o.Key) && o.Value != "" {
+		if sshconf.SensitiveKey(o.Key) && o.Value != "" {
 			o.Value = mask
 		}
 		h.Options = append(h.Options, o)
@@ -206,7 +191,11 @@ func (a *App) mutate(fn func(d *sshconf.Doc) error) (string, error) {
 	if err := fn(d); err != nil {
 		return "", err
 	}
-	return s.Save(d)
+	bak, err := s.Save(d)
+	if err == nil {
+		a.scheduleSync()
+	}
+	return bak, err
 }
 
 // SaveRequest creates (OrigAlias == "") or updates a host from the form.
@@ -219,7 +208,7 @@ type SaveRequest struct {
 
 func (a *App) SaveHost(r SaveRequest) (string, error) {
 	for _, c := range r.Changes {
-		if sensitiveRe.MatchString(c.Key) {
+		if sshconf.SensitiveKey(c.Key) {
 			return "", fmt.Errorf("%s 不能通过表单设置", c.Key)
 		}
 	}
@@ -299,30 +288,36 @@ func (a *App) terminalArgv(alias string, command []string) ([]string, error) {
 			case "{host}":
 				out = append(out, alias)
 			case "tssh":
-				out = append(out, a.set.TSSH)
+				out = append(out, proc.Resolve(a.set.TSSH))
 			default:
 				out = append(out, p)
 			}
 		}
-		return out, nil
+		return macTerminal(out), nil
 	}
 	// run another command: keep everything before the "tssh" word
 	for i, p := range parts {
 		if p == "tssh" {
-			return append(append([]string{}, parts[:i]...), command...), nil
+			return macTerminal(append(append([]string{}, parts[:i]...), command...)), nil
 		}
 	}
 	return nil, errors.New(`终端命令里需要有单独的 "tssh"，才能用它运行其他命令`)
 }
 
-func startDetached(argv []string) error {
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
-		return err
+// macTerminal turns "@terminal-app cmd args..." into an osascript call that
+// opens a Terminal.app window. Each argument is single-quoted for the shell
+// Terminal.app runs, then escaped for the AppleScript string.
+func macTerminal(argv []string) []string {
+	if len(argv) == 0 || argv[0] != settings.MacTerminalApp {
+		return argv
 	}
-	go cmd.Wait()
-	return nil
+	q := make([]string, 0, len(argv)-1)
+	for _, x := range argv[1:] {
+		q = append(q, "'"+strings.ReplaceAll(x, "'", `'\''`)+"'")
+	}
+	script := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(strings.Join(q, " "))
+	return []string{"osascript", "-e", `tell application "Terminal" to do script "` + script + `"`,
+		"-e", `tell application "Terminal" to activate`}
 }
 
 // Connect opens the configured terminal running "tssh alias".
@@ -334,7 +329,7 @@ func (a *App) Connect(alias string) error {
 	if err != nil {
 		return err
 	}
-	return startDetached(argv)
+	return proc.StartDetached(argv)
 }
 
 // ---- checks ----
@@ -394,7 +389,7 @@ func (a *App) GenerateKey(alias string) (KeyInfo, error) {
 	p := filepath.Join(dir, strings.ToLower(keyNameRe.ReplaceAllString(alias, "-"))+"_ed25519")
 	ki := KeyInfo{Path: p, Display: tilde(p)}
 	if _, err := os.Stat(p); errors.Is(err, os.ErrNotExist) {
-		out, err := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "tssh-manager:"+alias, "-f", p).CombinedOutput()
+		out, err := proc.Command(context.Background(), "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "tssh-manager:"+alias, "-f", p).CombinedOutput()
 		if err != nil {
 			return KeyInfo{}, fmt.Errorf("ssh-keygen: %s", strings.TrimSpace(string(out)))
 		}
@@ -408,7 +403,11 @@ func (a *App) GenerateKey(alias string) (KeyInfo, error) {
 	return ki, nil
 }
 
-const installScript = `umask 077; mkdir -p ~/.ssh && k=$(cat) && touch ~/.ssh/authorized_keys && (grep -qxF "$k" ~/.ssh/authorized_keys || printf '%s\n' "$k" >> ~/.ssh/authorized_keys) && echo TSSHM_KEY_OK`
+var pubKeyRe = regexp.MustCompile(`^[A-Za-z0-9-]+ [A-Za-z0-9+/=]+( [A-Za-z0-9@:._-]+)?$`)
+
+// installScript has no ";" because Windows Terminal (wt.exe) splits its
+// command line at semicolons.
+const installScript = `umask 077 && mkdir -p ~/.ssh && k=$(cat) && touch ~/.ssh/authorized_keys && (grep -qxF "$k" ~/.ssh/authorized_keys || printf '%s\n' "$k" >> ~/.ssh/authorized_keys) && echo TSSHM_KEY_OK`
 
 // InstallKey appends the public key on the server. Hosts with a stored tssh
 // password are done in the background; others open a terminal with ssh-copy-id.
@@ -422,15 +421,25 @@ func (a *App) InstallKey(alias, keyPath string, hasStoredPassword bool) (string,
 		return "", err
 	}
 	if !hasStoredPassword {
-		argv, err := a.terminalArgv(alias, []string{"ssh-copy-id", "-i", keyPath + ".pub", alias})
+		cmd := []string{"ssh-copy-id", "-i", keyPath + ".pub", alias}
+		if _, err := exec.LookPath("ssh-copy-id"); err != nil {
+			// Windows has no ssh-copy-id: log in with tssh in the terminal and
+			// append the key there (the password prompt is interactive).
+			k := strings.TrimSpace(string(pub))
+			if !pubKeyRe.MatchString(k) {
+				return "", errors.New("公钥文件格式不对")
+			}
+			cmd = []string{proc.Resolve(a.set.TSSH), alias, strings.Replace(installScript, "k=$(cat)", "k='"+k+"'", 1)}
+		}
+		argv, err := a.terminalArgv(alias, cmd)
 		if err != nil {
 			return "", err
 		}
-		return "terminal", startDetached(argv)
+		return "terminal", proc.StartDetached(argv)
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 40*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, a.set.TSSH, "-T", "-F", settings.Expand(a.set.ConfigPath), alias, installScript)
+	cmd := proc.Command(ctx, a.set.TSSH, "-T", "-F", settings.Expand(a.set.ConfigPath), alias, installScript)
 	cmd.Stdin = strings.NewReader(strings.TrimSpace(string(pub)) + "\n")
 	out, err := cmd.CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "TSSHM_KEY_OK") {
@@ -454,7 +463,7 @@ func (a *App) VerifyKey(alias, keyPath string) error {
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "ssh", "-F", "/dev/null", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+	cmd := proc.Command(ctx, "ssh", "-F", os.DevNull, "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
 		"-o", "IdentityAgent=none", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no",
 		"-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=accept-new",
 		"-i", keyPath, "-p", r.Port, "-l", r.User, r.HostName, "true")
@@ -558,5 +567,9 @@ func (a *App) RestoreBackup(p string) (string, error) {
 	if _, err := s.Load(); err != nil {
 		return "", err
 	}
-	return s.Save(nd)
+	bak, err := s.Save(nd)
+	if err == nil {
+		a.scheduleSync()
+	}
+	return bak, err
 }

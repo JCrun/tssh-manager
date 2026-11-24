@@ -18,8 +18,37 @@ env:
   WAILS_VERSION: v2.17.1
 
 jobs:
-  build:
+  version:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME}"; else v="dev-${GITHUB_SHA::7}"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+  gui:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-amd64
+            tags: webkit2_41
+          - os: windows-latest
+            target: windows-amd64
+            tags: ''
+          - os: macos-latest
+            target: macos-universal
+            tags: ''
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      V: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +64,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: System packages
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libgtk-3-dev libwebkit2gtk-4.1-dev openssh-client
@@ -42,50 +72,96 @@ jobs:
       - name: Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
 
-      - name: Version
-        id: ver
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF_NAME}"; else v="dev-${GITHUB_SHA::7}"; fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
-
       - name: Frontend type check
+        if: runner.os == 'Linux'
         working-directory: frontend
         run: |
           npm ci
           npx svelte-check --tsconfig ./tsconfig.json
 
       - name: Build
-        run: wails build -tags webkit2_41 -clean -trimpath -ldflags "-s -w -X main.version=${{ steps.ver.outputs.version }}"
+        run: |
+          args=(-clean -trimpath -ldflags "-s -w -X main.version=$V")
+          if [[ -n "${{ matrix.tags }}" ]]; then args+=(-tags "${{ matrix.tags }}"); fi
+          if [[ "$RUNNER_OS" == macOS ]]; then args+=(-platform darwin/universal); fi
+          wails build "${args[@]}"
 
       - name: Go tests
         run: |
-          go vet -tags webkit2_41 ./...
-          go test -tags webkit2_41 ./...
+          go vet -tags "${{ matrix.tags }}" ./...
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            go test ./internal/syncer/...   # the rest drives OpenSSH/POSIX tools
+          else
+            go test -tags "${{ matrix.tags }}" ./...
+          fi
 
       - name: Package
         id: pkg
         run: |
-          v="${{ steps.ver.outputs.version }}"
-          name="tssh-manager-${v}-linux-amd64"
+          name="tssh-manager-${V}-${{ matrix.target }}"
           mkdir -p "dist/$name"
-          cp build/bin/tssh-manager build/tssh-manager.svg README.md "dist/$name/"
-          cp scripts/install.sh "dist/$name/install.sh"
-          tar -C dist -czf "dist/$name.tar.gz" "$name"
-          (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          file "dist/$name/tssh-manager"
+          cp README.md "dist/$name/"
+          ext=""; [[ "$RUNNER_OS" == Windows ]] && ext=.exe
+          go build -trimpath -ldflags "-s -w -X main.version=$V" -o "dist/$name/tssh-sync$ext" ./cmd/tssh-sync
+          case "$RUNNER_OS" in
+            Linux)
+              cp build/bin/tssh-manager build/tssh-manager.svg "dist/$name/"
+              cp scripts/install.sh "dist/$name/install.sh"
+              tar -C dist -czf "dist/$name.tar.gz" "$name"
+              (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+              ;;
+            Windows)
+              cp build/bin/tssh-manager.exe "dist/$name/"
+              (cd dist && 7z a -tzip -bd "$name.zip" "$name" >/dev/null && sha256sum "$name.zip" > "$name.zip.sha256")
+              ;;
+            macOS)
+              cp -R build/bin/tssh-manager.app "dist/$name/"
+              (cd dist && ditto -c -k --keepParent "$name" "$name.zip" && shasum -a 256 "$name.zip" > "$name.zip.sha256")
+              ;;
+          esac
+          rm -rf "dist/$name"
+          ls -la dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.pkg.outputs.name }}
-          path: |
-            dist/*.tar.gz
-            dist/*.sha256
+          name: gui-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  # tssh-sync is pure Go: cross-compile it for every platform, including
+  # Android (Termux) and headless Linux servers without GTK.
+  cli:
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build tssh-sync
+        run: |
+          mkdir -p dist
+          for t in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64 android/arm64 freebsd/amd64; do
+            os=${t%/*}; arch=${t#*/}; ext=""; [ "$os" = windows ] && ext=.exe
+            name="tssh-sync-${V}-${os}-${arch}"
+            CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$V" -o "dist/$name/tssh-sync$ext" ./cmd/tssh-sync
+            if [ "$os" = windows ]; then (cd dist && zip -qr "$name.zip" "$name"); else tar -C dist -czf "dist/$name.tar.gz" "$name"; fi
+            rm -rf "dist/$name"
+          done
+          (cd dist && sha256sum tssh-sync-* > tssh-sync-${V}.sha256)
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli
+          path: dist/*
           if-no-files-found: error
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [gui, cli]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -99,18 +175,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > notes.md <<'EOF'
+          cat > notes.md <<'NOTES'
           ### Install
 
-          Requires GTK 3 and WebKitGTK 4.1 (Arch/CachyOS: `webkit2gtk-4.1`; Debian/Ubuntu: `libwebkit2gtk-4.1-0`) and [tssh](https://github.com/trzsz/trzsz-ssh).
+          All platforms need [tssh](https://github.com/trzsz/trzsz-ssh) and OpenSSH (`ssh`, `ssh-keygen`).
 
+          **Linux** (x86_64): needs GTK 3 and WebKitGTK 4.1 (Arch/CachyOS: `webkit2gtk-4.1`; Debian/Ubuntu: `libwebkit2gtk-4.1-0`).
           ```sh
           tar xzf tssh-manager-*-linux-amd64.tar.gz
           cd tssh-manager-*-linux-amd64 && ./install.sh
           ```
 
-          This installs `~/.local/bin/tssh-manager` plus an app-menu entry. `./install.sh --uninstall` removes them.
-          EOF
+          **macOS** (Apple Silicon and Intel): unzip and move `tssh-manager.app` to Applications. The app is not signed, so the first time run
+          `xattr -dr com.apple.quarantine /Applications/tssh-manager.app`, or right-click → Open.
+
+          **Windows** 10/11 (x64): unzip and run `tssh-manager.exe`. Uses the built-in OpenSSH client and WebView2.
+
+          **tssh-sync**: the command line sync tool for servers, Termux (`android-arm64`) or cron. See the README.
+          NOTES
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "$GITHUB_REF_NAME" \

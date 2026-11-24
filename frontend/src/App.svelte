@@ -6,12 +6,18 @@
   import KeyWizard from './lib/KeyWizard.svelte'
   import SettingsDialog from './lib/SettingsDialog.svelte'
   import BackupsDialog from './lib/BackupsDialog.svelte'
+  import SyncDialog from './lib/SyncDialog.svelte'
+  import { syncSummary, type SyncResult } from './lib/api'
 
   let st = $state<State | null>(null)
   let loadError = $state('')
   let selKey = $state<string | null>(null)
   let mode = $state<'view' | 'edit' | 'new' | 'key'>('view')
-  let dialog = $state<'' | 'settings' | 'backups'>('')
+  let dialog = $state<'' | 'settings' | 'backups' | 'sync'>('')
+  let syncOn = $state(false)
+  let syncState = $state<'' | 'running' | 'ok' | 'conflict' | 'error'>('')
+  let syncMsg = $state('')
+  let syncResult = $state<SyncResult | null>(null)
   let query = $state('')
   let filter = $state<'all' | 'plain' | 'failed'>('all')
   let checks = $state<Record<string, CheckResult>>({})
@@ -45,7 +51,13 @@
     const offs = [
       EventsOn('check:start', (a: string) => (checking[a] = true)),
       EventsOn('check:result', (r: CheckResult) => { checks[r.alias] = r; checking[r.alias] = false }),
+      EventsOn('sync:running', () => (syncState = 'running')),
+      EventsOn('sync:result', (ev: { result: SyncResult | null; error: string }) => {
+        if (ev.error) { syncState = 'error'; syncMsg = ev.error; notify('自动同步失败：' + ev.error, 'bad'); return }
+        if (ev.result) synced(ev.result, true)
+      }),
     ]
+    api.GetSync().then((v) => (syncOn = !!v.backend))
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); searchEl?.focus() }
       if ((e.ctrlKey || e.metaKey) && e.key === 'r') { e.preventDefault(); load() }
@@ -101,6 +113,15 @@
     try { await api.Connect(h.alias); notify(`已在终端打开 tssh ${h.alias}`) } catch (e) { notify(errText(e), 'bad') }
   }
 
+  function synced(r: SyncResult, auto = false) {
+    syncResult = r
+    syncMsg = syncSummary(r)
+    syncState = r.status === 'conflict' ? 'conflict' : 'ok'
+    if (r.status === 'pulled' || r.status === 'merged') load()
+    if (r.status === 'conflict') notify(syncMsg + '，点「同步」处理', 'bad')
+    else if (!auto || r.status !== 'uptodate' && r.status !== 'pushed') notify(syncMsg)
+  }
+
   function saved(msg: string, select?: string | null) {
     mode = 'view'
     notify(msg)
@@ -122,6 +143,9 @@
       <button onclick={checkAll} disabled={anyChecking || !st}>{anyChecking ? '检查中…' : '全部检查'}</button>
       <button onclick={() => { mode = 'new' }}>新建</button>
       <button class="ghost" onclick={() => load()} title="重新读取配置（Ctrl+R）">刷新</button>
+      <button class="ghost sync" onclick={() => (dialog = 'sync')} title={syncMsg || (syncOn ? '多端同步' : '设置多端同步')}>
+        {#if syncOn}<span class="dot {syncState === 'running' ? 'run' : syncState === 'ok' ? 'ok' : syncState === 'conflict' ? 'warn' : syncState === 'error' ? 'bad' : ''}"></span>{/if}同步{syncState === 'conflict' ? '（冲突）' : ''}
+      </button>
       <button class="ghost" onclick={() => (dialog = 'backups')}>备份</button>
       <button class="ghost" onclick={() => (dialog = 'settings')}>设置</button>
     </div>
@@ -191,9 +215,15 @@
 
   {#if dialog}
     <div class="scrim" role="presentation" onclick={(e) => e.target === e.currentTarget && (dialog = '')}>
-      <div class="dialog">
+      <div class="dialog" class:wide={dialog === 'sync'}>
         {#if dialog === 'settings'}
           <SettingsDialog onclose={() => (dialog = '')} onsaved={() => { dialog = ''; notify('设置已保存'); load() }} />
+        {:else if dialog === 'sync'}
+          <SyncDialog
+            initial={syncState === 'conflict' ? syncResult : null}
+            onclose={() => { dialog = ''; api.GetSync().then((v) => (syncOn = !!v.backend)) }}
+            onsynced={(r) => synced(r)}
+          />
         {:else}
           <BackupsDialog onclose={() => (dialog = '')} onrestored={(m) => { dialog = ''; notify(m); load() }} />
         {/if}
@@ -235,6 +265,8 @@
   .warnline { margin: 12px 20px 0; padding: 8px 10px; border-radius: 6px; color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, transparent); }
   .placeholder { color: var(--faint); padding: 40px 20px; }
   .scrim { position: fixed; inset: 0; background: rgb(0 0 0 / .45); display: grid; place-items: center; z-index: 10; }
+  .sync { display: inline-flex; align-items: center; gap: 6px; }
+  .dialog.wide { width: min(820px, calc(100vw - 32px)); }
   .dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 60px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 20px 60px rgb(0 0 0 / .4); }
   .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; box-shadow: 0 8px 30px rgb(0 0 0 / .3); z-index: 20; max-width: 70vw; }
   .toast.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }

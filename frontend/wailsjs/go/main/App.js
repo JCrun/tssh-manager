@@ -26,6 +26,10 @@ export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
 }
 
+export function GetSync() {
+  return window['go']['main']['App']['GetSync']();
+}
+
 export function InstallKey(arg1, arg2, arg3) {
   return window['go']['main']['App']['InstallKey'](arg1, arg2, arg3);
 }
@@ -62,12 +66,28 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
+export function SaveSync(arg1) {
+  return window['go']['main']['App']['SaveSync'](arg1);
+}
+
 export function SetPassword(arg1, arg2) {
   return window['go']['main']['App']['SetPassword'](arg1, arg2);
 }
 
 export function SwitchToKey(arg1, arg2) {
   return window['go']['main']['App']['SwitchToKey'](arg1, arg2);
+}
+
+export function SyncNow(arg1) {
+  return window['go']['main']['App']['SyncNow'](arg1);
+}
+
+export function SyncReset() {
+  return window['go']['main']['App']['SyncReset']();
+}
+
+export function TerminalPresets() {
+  return window['go']['main']['App']['TerminalPresets']();
 }
 
 export function VerifyKey(arg1, arg2) {

@@ -1,5 +1,5 @@
 import * as Go from '../../wailsjs/go/main/App'
-import { main, sshconf, settings } from '../../wailsjs/go/models'
+import { main, sshconf, settings, syncer } from '../../wailsjs/go/models'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 
 export type Host = main.HostView
@@ -7,6 +7,8 @@ export type State = main.State
 export type KeyInfo = main.KeyInfo
 export type Settings = settings.Settings
 export type Change = sshconf.Change
+export type SyncView = main.SyncView
+export type SyncResult = syncer.Result
 
 export interface CheckResult {
   alias: string
@@ -53,4 +55,16 @@ export function endpoint(h: Host): string {
   const port = h.port || e.Port || '22'
   const user = h.user || e.User || ''
   return `${user ? user + '@' : ''}${host}${port === '22' ? '' : ':' + port}`
+}
+
+export function syncSummary(r: SyncResult): string {
+  const n = (r.changes?.fromRemote?.length ?? 0) + (r.changes?.fromLocal?.length ?? 0)
+  switch (r.status) {
+    case 'uptodate': return '同步完成：已是最新'
+    case 'pulled': return `同步完成：从远端更新了 ${n} 项`
+    case 'pushed': return n ? `同步完成：上传了 ${n} 项改动` : '同步完成：已上传本机配置'
+    case 'merged': return `同步完成：合并了 ${n} 项改动`
+    case 'conflict': return `同步有 ${r.conflicts?.length ?? 0} 处冲突，需要选择`
+  }
+  return r.status
 }

@@ -1,5 +1,6 @@
 // Package settings stores tssh-manager preferences in
-// $XDG_CONFIG_HOME/tssh-manager/settings.json.
+// <config dir>/tssh-manager/settings.json: $XDG_CONFIG_HOME or ~/.config on
+// Linux, ~/Library/Application Support on macOS, %AppData% on Windows.
 package settings
 
 import (
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -22,6 +24,9 @@ type Settings struct {
 
 func Dir() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" && runtime.GOOS != "linux" {
+		base, _ = os.UserConfigDir()
+	}
 	if base == "" {
 		home, _ := os.UserHomeDir()
 		base = filepath.Join(home, ".config")
@@ -31,9 +36,30 @@ func Dir() string {
 
 func path() string { return filepath.Join(Dir(), "settings.json") }
 
-// DetectTerminal picks the first installed terminal.
-func DetectTerminal() string {
-	for _, t := range []struct{ bin, cmd string }{
+type terminal struct{ bin, cmd string }
+
+// MacTerminalApp is a pseudo command understood by the app: it opens
+// Terminal.app through osascript, which cannot be expressed as plain argv.
+const MacTerminalApp = "@terminal-app"
+
+func terminals() []terminal {
+	switch runtime.GOOS {
+	case "darwin":
+		return []terminal{
+			{"/Applications/Ghostty.app", "open -na Ghostty --args -e tssh {host}"},
+			{"/Applications/WezTerm.app", "open -na WezTerm --args start -- tssh {host}"},
+			{"/Applications/kitty.app", "open -na kitty --args tssh {host}"},
+			{"/Applications/Alacritty.app", "open -na Alacritty --args -e tssh {host}"},
+			{"/System/Applications/Utilities/Terminal.app", MacTerminalApp + " tssh {host}"},
+		}
+	case "windows":
+		return []terminal{
+			{"wt.exe", "wt.exe tssh {host}"},
+			{"wezterm.exe", "wezterm.exe start -- tssh {host}"},
+			{"", "tssh {host}"}, // its own console window
+		}
+	}
+	return []terminal{
 		{"ghostty", "ghostty -e tssh {host}"},
 		{"kitty", "kitty tssh {host}"},
 		{"wezterm", "wezterm start -- tssh {host}"},
@@ -44,12 +70,43 @@ func DetectTerminal() string {
 		{"ptyxis", "ptyxis -- tssh {host}"},
 		{"xfce4-terminal", "xfce4-terminal -x tssh {host}"},
 		{"xterm", "xterm -e tssh {host}"},
-	} {
-		if _, err := exec.LookPath(t.bin); err == nil {
+	}
+}
+
+func installed(bin string) bool {
+	if bin == "" {
+		return true
+	}
+	if filepath.IsAbs(bin) {
+		_, err := os.Stat(bin)
+		return err == nil
+	}
+	_, err := exec.LookPath(bin)
+	return err == nil
+}
+
+// DetectTerminal picks the first installed terminal.
+func DetectTerminal() string {
+	ts := terminals()
+	for _, t := range ts {
+		if installed(t.bin) {
 			return t.cmd
 		}
 	}
-	return "xterm -e tssh {host}"
+	return ts[len(ts)-1].cmd
+}
+
+// TerminalPresets lists the terminal commands for this OS, installed ones first.
+func TerminalPresets() []string {
+	var a, b []string
+	for _, t := range terminals() {
+		if installed(t.bin) {
+			a = append(a, t.cmd)
+		} else {
+			b = append(b, t.cmd)
+		}
+	}
+	return append(a, b...)
 }
 
 func Defaults() Settings {
@@ -97,7 +154,7 @@ func Save(s Settings) error {
 
 // Expand turns "~/" into the home directory.
 func Expand(p string) string {
-	if strings.HasPrefix(p, "~/") {
+	if strings.HasPrefix(p, "~/") || (runtime.GOOS == "windows" && strings.HasPrefix(p, `~\`)) {
 		home, _ := os.UserHomeDir()
 		return filepath.Join(home, p[2:])
 	}

@@ -7,6 +7,9 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
+
+	"tssh-manager/internal/proc"
 )
 
 //go:embed all:frontend/dist
@@ -19,6 +22,7 @@ var icon []byte
 var version = "dev"
 
 func main() {
+	proc.FixPath()
 	app := NewApp()
 
 	err := wails.Run(&options.App{
@@ -34,6 +38,9 @@ func main() {
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		Mac: &mac.Options{
+			About: &mac.AboutInfo{Title: "tssh-manager", Message: "A GUI for ~/.ssh/config, for tssh.", Icon: icon},
 		},
 		Linux: &linux.Options{
 			Icon: icon,

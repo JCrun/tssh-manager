@@ -1,6 +1,7 @@
 package sshconf
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -11,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"tssh-manager/internal/proc"
 )
 
 // Store owns the on-disk config file.
@@ -149,7 +152,7 @@ func sshCheck(dir, text string) error {
 		return err
 	}
 	f.Close()
-	out, err := exec.Command(ssh, "-G", "-F", f.Name(), "tsshm-validate.invalid").CombinedOutput()
+	out, err := proc.Command(context.Background(), ssh, "-G", "-F", f.Name(), "tsshm-validate.invalid").CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		msg = strings.ReplaceAll(msg, f.Name(), "config")

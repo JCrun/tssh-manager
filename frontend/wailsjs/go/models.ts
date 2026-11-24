@@ -172,6 +172,66 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class SyncSave {
+	    backend: string;
+	    folder: string;
+	    webdavURL: string;
+	    webdavUser: string;
+	    webdavPassword: string;
+	    passphrase: string;
+	    syncKeys: boolean;
+	    auto: boolean;
+	    device: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncSave(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.backend = source["backend"];
+	        this.folder = source["folder"];
+	        this.webdavURL = source["webdavURL"];
+	        this.webdavUser = source["webdavUser"];
+	        this.webdavPassword = source["webdavPassword"];
+	        this.passphrase = source["passphrase"];
+	        this.syncKeys = source["syncKeys"];
+	        this.auto = source["auto"];
+	        this.device = source["device"];
+	    }
+	}
+	export class SyncView {
+	    backend: string;
+	    folder: string;
+	    webdavURL: string;
+	    webdavUser: string;
+	    hasWebdavPassword: boolean;
+	    hasPassphrase: boolean;
+	    syncKeys: boolean;
+	    auto: boolean;
+	    device: string;
+	    keyDir: string;
+	    lastSync: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SyncView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.backend = source["backend"];
+	        this.folder = source["folder"];
+	        this.webdavURL = source["webdavURL"];
+	        this.webdavUser = source["webdavUser"];
+	        this.hasWebdavPassword = source["hasWebdavPassword"];
+	        this.hasPassphrase = source["hasPassphrase"];
+	        this.syncKeys = source["syncKeys"];
+	        this.auto = source["auto"];
+	        this.device = source["device"];
+	        this.keyDir = source["keyDir"];
+	        this.lastSync = source["lastSync"];
+	    }
+	}
 
 }
 
@@ -231,6 +291,91 @@ export namespace sshconf {
 	        this.value = source["value"];
 	        this.ext = source["ext"];
 	    }
+	}
+
+}
+
+export namespace syncer {
+	
+	export class Changes {
+	    fromRemote: string[];
+	    fromLocal: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Changes(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fromRemote = source["fromRemote"];
+	        this.fromLocal = source["fromLocal"];
+	    }
+	}
+	export class Conflict {
+	    id: string;
+	    kind: string;
+	    name: string;
+	    local: string;
+	    remote: string;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Conflict(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.local = source["local"];
+	        this.remote = source["remote"];
+	        this.note = source["note"];
+	    }
+	}
+	export class Result {
+	    status: string;
+	    remote: string;
+	    remoteDevice: string;
+	    changes: Changes;
+	    conflicts: Conflict[];
+	    warnings: string[];
+	    backup: string;
+	    time: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.remote = source["remote"];
+	        this.remoteDevice = source["remoteDevice"];
+	        this.changes = this.convertValues(source["changes"], Changes);
+	        this.conflicts = this.convertValues(source["conflicts"], Conflict);
+	        this.warnings = source["warnings"];
+	        this.backup = source["backup"];
+	        this.time = source["time"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }
