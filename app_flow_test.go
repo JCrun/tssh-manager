@@ -18,7 +18,9 @@ func TestAppFlow(t *testing.T) {
 	cfg := filepath.Join(dir, "config")
 	orig := "Host *\n    SetEnv TERM=xterm-256color\n\n# VPS\nHost a\n    HostName 1.1.1.1\n    User root\n    #!! Password hunter2\n"
 	os.WriteFile(cfg, []byte(orig), 0o600)
-	a := &App{ctx: context.Background(), set: settings.Settings{ConfigPath: cfg, KeyDir: filepath.Join(dir, "keys"), TSSH: "tssh", Terminal: "true tssh {host}"}}
+	fake := filepath.Join(dir, "tssh") // CI runners have no tssh
+	os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755)
+	a := &App{ctx: context.Background(), set: settings.Settings{ConfigPath: cfg, KeyDir: filepath.Join(dir, "keys"), TSSH: fake, Terminal: "true tssh {host}"}}
 
 	st, err := a.Load()
 	if err != nil || len(st.Hosts) != 2 || st.Hosts[1].Section != "VPS" {
@@ -81,7 +83,7 @@ func TestAppFlow(t *testing.T) {
 	}
 	// terminal argv: {host} is a separate argument, never a shell string
 	argv, _ := a.terminalArgv("a; rm -rf ~", nil)
-	if len(argv) != 3 || argv[0] != "true" || filepath.Base(argv[1]) != "tssh" || argv[2] != "a; rm -rf ~" {
+	if len(argv) != 3 || argv[0] != "true" || argv[1] != fake || argv[2] != "a; rm -rf ~" {
 		t.Fatalf("argv %q", argv)
 	}
 	// Terminal.app: quoted for the shell, then for AppleScript
@@ -91,6 +93,14 @@ func TestAppFlow(t *testing.T) {
 	}
 	if err := a.Connect("a; rm"); err == nil {
 		t.Fatal("Connect accepted an unsafe alias")
+	}
+	// a missing tssh is reported with install instructions, not a raw exec error
+	a.set.TSSH = filepath.Join(dir, "no-such-tssh")
+	if _, err := a.terminalArgv("a", nil); err == nil || !strings.Contains(err.Error(), "找不到") {
+		t.Fatalf("missing tssh: %v", err)
+	}
+	if st, _ := a.Load(); len(st.Warnings) == 0 {
+		t.Fatal("no warning for missing tssh")
 	}
 }
 

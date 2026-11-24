@@ -232,6 +232,24 @@ export namespace main {
 	        this.lastSync = source["lastSync"];
 	    }
 	}
+	export class TSSHInfo {
+	    path: string;
+	    source: string;
+	    version: string;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TSSHInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.source = source["source"];
+	        this.version = source["version"];
+	        this.error = source["error"];
+	    }
+	}
 
 }
 

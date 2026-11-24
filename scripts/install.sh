@@ -1,7 +1,8 @@
 #!/bin/sh
 # Build and install tssh-manager for the current user:
 #   ~/.local/bin/tssh-manager
-#   ~/.local/bin/tssh-sync (command line sync, when built from source)
+#   ~/.local/bin/tssh-sync (command line sync)
+#   ~/.local/bin/tssh (the bundled official tssh, only if none is installed yet)
 #   ~/.local/share/applications/tssh-manager.desktop
 #   ~/.local/share/icons/hicolor/scalable/apps/tssh-manager.svg
 # Usage: scripts/install.sh [--no-build] | --uninstall
@@ -16,6 +17,7 @@ else
 fi
 
 BIN="$HOME/.local/bin"
+MARK="${XDG_DATA_HOME:-$HOME/.local/share}/tssh-manager/bundled-tssh"
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
 ICONS="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
 
@@ -25,6 +27,7 @@ refresh() {
 }
 
 if [ "${1:-}" = "--uninstall" ]; then
+  if [ -f "$MARK" ]; then rm -f "$BIN/tssh" "$MARK"; fi  # only the tssh we installed
   rm -f "$BIN/tssh-manager" "$BIN/tssh-sync" "$APPS/tssh-manager.desktop" "$ICONS/scalable/apps/tssh-manager.svg"
   for s in 48 128 256; do rm -f "$ICONS/${s}x${s}/apps/tssh-manager.png"; done
   refresh
@@ -42,6 +45,17 @@ fi
 install -Dm755 "$SRC_BIN" "$BIN/tssh-manager"
 SRC_SYNC="$(dirname "$SRC_BIN")/tssh-sync"
 [ -x "$SRC_SYNC" ] && install -Dm755 "$SRC_SYNC" "$BIN/tssh-sync"
+# Bundled tssh: install it only when the user has none (or it is ours from before).
+SRC_TSSH="$(dirname "$SRC_BIN")/tssh"
+if [ -x "$SRC_TSSH" ]; then
+  if [ -f "$MARK" ] || ! command -v tssh >/dev/null; then
+    install -Dm755 "$SRC_TSSH" "$BIN/tssh"
+    mkdir -p "$(dirname "$MARK")" && : > "$MARK"
+    echo "installed bundled tssh: $BIN/tssh"
+  else
+    echo "using your existing tssh: $(command -v tssh)"
+  fi
+fi
 install -Dm644 "$SRC_SVG" "$ICONS/scalable/apps/tssh-manager.svg"
 if command -v rsvg-convert >/dev/null; then
   for s in 48 128 256; do

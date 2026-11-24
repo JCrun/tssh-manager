@@ -16,6 +16,7 @@ concurrency:
 
 env:
   WAILS_VERSION: v2.17.1
+  TSSH_VERSION: 0.1.27  # official tssh bundled into the desktop packages
 
 jobs:
   version:
@@ -107,15 +108,18 @@ jobs:
             Linux)
               cp build/bin/tssh-manager build/tssh-manager.svg "dist/$name/"
               cp scripts/install.sh "dist/$name/install.sh"
+              scripts/fetch-tssh.sh linux-amd64 "dist/$name" "dist/$name"
               tar -C dist -czf "dist/$name.tar.gz" "$name"
               (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
               ;;
             Windows)
               cp build/bin/tssh-manager.exe "dist/$name/"
+              scripts/fetch-tssh.sh windows-amd64 "dist/$name" "dist/$name"
               (cd dist && 7z a -tzip -bd "$name.zip" "$name" >/dev/null && sha256sum "$name.zip" > "$name.zip.sha256")
               ;;
             macOS)
               cp -R build/bin/tssh-manager.app "dist/$name/"
+              scripts/fetch-tssh.sh macos-universal "dist/$name/tssh-manager.app/Contents/MacOS" "dist/$name"
               (cd dist && ditto -c -k --keepParent "$name" "$name.zip" && shasum -a 256 "$name.zip" > "$name.zip.sha256")
               ;;
           esac
@@ -178,7 +182,7 @@ jobs:
           cat > notes.md <<'NOTES'
           ### Install
 
-          All platforms need [tssh](https://github.com/trzsz/trzsz-ssh) and OpenSSH (`ssh`, `ssh-keygen`).
+          The desktop packages include the official [tssh](https://github.com/trzsz/trzsz-ssh) (MIT, see `tssh-LICENSE.txt`). If you already have tssh installed, your copy is used instead. OpenSSH (`ssh`, `ssh-keygen`) is still needed; it is built into macOS and Windows 10/11.
 
           **Linux** (x86_64): needs GTK 3 and WebKitGTK 4.1 (Arch/CachyOS: `webkit2gtk-4.1`; Debian/Ubuntu: `libwebkit2gtk-4.1-0`).
           ```sh

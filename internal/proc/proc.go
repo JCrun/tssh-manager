@@ -58,14 +58,3 @@ func FixPath() {
 	}
 	os.Setenv("PATH", strings.Join(cur, string(os.PathListSeparator)))
 }
-
-// Resolve returns the absolute path of bin if it is on PATH, else bin unchanged.
-func Resolve(bin string) string {
-	if p, err := exec.LookPath(bin); err == nil {
-		if abs, err := filepath.Abs(p); err == nil {
-			return abs
-		}
-		return p
-	}
-	return bin
-}

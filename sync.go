@@ -7,6 +7,7 @@ import (
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"tssh-manager/internal/proc"
 	"tssh-manager/internal/settings"
 	"tssh-manager/internal/syncer"
 )
@@ -124,6 +125,22 @@ func (a *App) scheduleSync() {
 		a.sync.timer.Stop()
 	}
 	a.sync.timer = time.AfterFunc(2*time.Second, a.autoSync)
+}
+
+// TSSHInfo describes the tssh that will be used.
+type TSSHInfo struct {
+	proc.TSSH
+	Version string `json:"version"`
+	Error   string `json:"error"`
+}
+
+func (a *App) GetTSSH() TSSHInfo {
+	t := proc.FindTSSH(a.set.TSSH)
+	info := TSSHInfo{TSSH: t, Version: t.Version()}
+	if err := t.Err(); err != nil {
+		info.Error = err.Error()
+	}
+	return info
 }
 
 // TerminalPresets lists terminal commands for this OS.

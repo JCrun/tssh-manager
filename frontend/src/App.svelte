@@ -96,8 +96,9 @@
   const failedCount = $derived(realHosts.filter((h) => checks[h.alias] && checks[h.alias].login !== 'ok').length)
   const anyChecking = $derived(Object.values(checking).some(Boolean))
 
-  function checkAll() { api.Check(visible.filter((h) => !h.wildcard && h.patterns.length === 1).map((h) => h.alias)) }
-  function checkOne(a: string) { api.Check([a]) }
+  function check(aliases: string[]) { api.Check(aliases).catch((e) => notify(errText(e), 'bad')) }
+  function checkAll() { check(visible.filter((h) => !h.wildcard && h.patterns.length === 1).map((h) => h.alias)) }
+  function checkOne(a: string) { check([a]) }
 
   function dotClass(h: Host) {
     if (h.wildcard) return 'none'

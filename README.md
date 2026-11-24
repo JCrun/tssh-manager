@@ -15,6 +15,16 @@ Optional end-to-end encrypted sync keeps the config (and, if you want, your keys
 - `#!! encPassword` is flagged as weak: tssh encrypts it with a fixed key that is public in its source, so it is no safer than plaintext.
 - Passwords (`#!! Password`, `encPassword`, TOTP secrets…) are never sent to the UI unless you click reveal. They appear as `******`, and leaving the mask unchanged in the raw editor keeps the stored value.
 
+## tssh
+
+The release packages include the official [tssh](https://github.com/trzsz/trzsz-ssh) binary (MIT, `tssh-LICENSE.txt`), with its checksum verified at build time. The version is set by `TSSH_VERSION` in the workflow and fetched by `scripts/fetch-tssh.sh`. Which tssh is used:
+
+1. the **tssh program** setting, if you changed it from `tssh`;
+2. otherwise a `tssh` on `PATH`, so a version you installed yourself always wins;
+3. otherwise the bundled copy next to the app (`tssh.exe` beside `tssh-manager.exe`, or `tssh-manager.app/Contents/MacOS/tssh`). On Linux, `install.sh` puts the bundled copy in `~/.local/bin/tssh` only if you have no tssh yet. Uninstalling removes only that copy.
+
+The settings dialog shows the path, where it came from and its version. If none is found, connect and check show the official install command for your OS instead of a system error. The official install commands are `winget install tssh`, `brew install trzsz-ssh`, `yay -S tssh`, or `sudo apt install tssh` from `ppa:trzsz/ppa`.
+
 ## Multi-device sync
 
 Sync is off until you set it up under **同步** (or with `tssh-sync setup`). You need two things on every device:
@@ -79,7 +89,7 @@ Prebuilt builds are on the [Releases](https://github.com/JCrun/tssh-manager/rele
 
 - **Linux x86_64**: unpack and run `./install.sh`. Needs GTK 3 and WebKitGTK 4.1 (`webkit2gtk-4.1` on Arch, `libwebkit2gtk-4.1-0` on Debian/Ubuntu).
 - **macOS** (universal): move `tssh-manager.app` to Applications. It is not signed, so run `xattr -dr com.apple.quarantine /Applications/tssh-manager.app` once, or right-click and choose Open.
-- **Windows x64**: unzip and run `tssh-manager.exe`.
+- **Windows x64**: unzip and run `tssh-manager.exe`, keeping `tssh.exe` in the same folder.
 - **tssh-sync** on its own for Linux, macOS, Windows, FreeBSD and Android (Termux), amd64 and arm64.
 
 Each desktop package also contains `tssh-sync`.

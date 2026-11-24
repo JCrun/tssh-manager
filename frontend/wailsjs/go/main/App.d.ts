@@ -18,6 +18,8 @@ export function GetSettings():Promise<settings.Settings>;
 
 export function GetSync():Promise<main.SyncView>;
 
+export function GetTSSH():Promise<main.TSSHInfo>;
+
 export function InstallKey(arg1:string,arg2:string,arg3:boolean):Promise<string>;
 
 export function ListBackups():Promise<Array<main.Backup>>;

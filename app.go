@@ -167,6 +167,9 @@ func (a *App) Load() (State, error) {
 			st.Warnings = append(st.Warnings, fmt.Sprintf("Host %s 定义了 %d 次，只能在文件里手动修改。", alias, n))
 		}
 	}
+	if err := proc.FindTSSH(a.set.TSSH).Err(); err != nil {
+		st.Warnings = append(st.Warnings, err.Error())
+	}
 	for _, l := range strings.Split(d.String(), "\n") {
 		if includeRe.MatchString(l) {
 			st.Warnings = append(st.Warnings, "配置使用了 Include，被包含文件里的主机不会显示。")
@@ -276,19 +279,30 @@ func (a *App) RemovePassword(alias string) (string, error) {
 
 // ---- terminal ----
 
+// tssh returns the tssh binary to run: the setting, then PATH, then the copy
+// bundled with the app.
+func (a *App) tssh() (string, error) {
+	t := proc.FindTSSH(a.set.TSSH)
+	return t.Path, t.Err()
+}
+
 func (a *App) terminalArgv(alias string, command []string) ([]string, error) {
 	parts := strings.Fields(a.set.Terminal)
 	if len(parts) == 0 {
 		return nil, errors.New("终端命令为空")
 	}
 	if command == nil {
+		tssh, err := a.tssh()
+		if err != nil {
+			return nil, err
+		}
 		out := make([]string, 0, len(parts))
 		for _, p := range parts {
 			switch p {
 			case "{host}":
 				out = append(out, alias)
 			case "tssh":
-				out = append(out, proc.Resolve(a.set.TSSH))
+				out = append(out, tssh)
 			default:
 				out = append(out, p)
 			}
@@ -334,14 +348,18 @@ func (a *App) Connect(alias string) error {
 
 // ---- checks ----
 
-func (a *App) checkOpts() checker.Options {
-	return checker.Options{SSH: "ssh", TSSH: a.set.TSSH, ConfigPath: settings.Expand(a.set.ConfigPath),
+func (a *App) checkOpts(tssh string) checker.Options {
+	return checker.Options{SSH: "ssh", TSSH: tssh, ConfigPath: settings.Expand(a.set.ConfigPath),
 		TCPTimeout: 5 * time.Second, AuthTimeout: 25 * time.Second}
 }
 
 // Check tests hosts in parallel and emits "check:start"/"check:result" per host, then "check:done".
-func (a *App) Check(aliases []string) {
-	o := a.checkOpts()
+func (a *App) Check(aliases []string) error {
+	tssh, err := a.tssh()
+	if err != nil {
+		return err
+	}
+	o := a.checkOpts(tssh)
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 	for _, al := range aliases {
@@ -358,6 +376,7 @@ func (a *App) Check(aliases []string) {
 		}(al)
 	}
 	go func() { wg.Wait(); runtime.EventsEmit(a.ctx, "check:done") }()
+	return nil
 }
 
 // ---- keys ----
@@ -420,6 +439,10 @@ func (a *App) InstallKey(alias, keyPath string, hasStoredPassword bool) (string,
 	if err != nil {
 		return "", err
 	}
+	tssh, err := a.tssh()
+	if err != nil {
+		return "", err
+	}
 	if !hasStoredPassword {
 		cmd := []string{"ssh-copy-id", "-i", keyPath + ".pub", alias}
 		if _, err := exec.LookPath("ssh-copy-id"); err != nil {
@@ -429,7 +452,7 @@ func (a *App) InstallKey(alias, keyPath string, hasStoredPassword bool) (string,
 			if !pubKeyRe.MatchString(k) {
 				return "", errors.New("公钥文件格式不对")
 			}
-			cmd = []string{proc.Resolve(a.set.TSSH), alias, strings.Replace(installScript, "k=$(cat)", "k='"+k+"'", 1)}
+			cmd = []string{tssh, alias, strings.Replace(installScript, "k=$(cat)", "k='"+k+"'", 1)}
 		}
 		argv, err := a.terminalArgv(alias, cmd)
 		if err != nil {
@@ -439,7 +462,7 @@ func (a *App) InstallKey(alias, keyPath string, hasStoredPassword bool) (string,
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 40*time.Second)
 	defer cancel()
-	cmd := proc.Command(ctx, a.set.TSSH, "-T", "-F", settings.Expand(a.set.ConfigPath), alias, installScript)
+	cmd := proc.Command(ctx, tssh, "-T", "-F", settings.Expand(a.set.ConfigPath), alias, installScript)
 	cmd.Stdin = strings.NewReader(strings.TrimSpace(string(pub)) + "\n")
 	out, err := cmd.CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "TSSHM_KEY_OK") {

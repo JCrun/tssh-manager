@@ -30,6 +30,10 @@ export function GetSync() {
   return window['go']['main']['App']['GetSync']();
 }
 
+export function GetTSSH() {
+  return window['go']['main']['App']['GetTSSH']();
+}
+
 export function InstallKey(arg1, arg2, arg3) {
   return window['go']['main']['App']['InstallKey'](arg1, arg2, arg3);
 }
